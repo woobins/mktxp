@@ -79,17 +79,54 @@ class CapsmanRegistrationsMetricsDataSource:
 
 
 class CapsmanInterfacesDatasource:
-    ''' Data provider for CAPsMaN interfaces
+    ''' Data provider for CAPsMaN interfaces.
+        Supports legacy /caps-man/interface AND the new RouterOS 7 wifi package
+        where CAPsMAN virtual interfaces live under /interface/wifi (named cap-wifi*).
     '''
     @staticmethod
     def metric_records(router_entry, *, metric_labels = None):
-        if not router_entry.capsman_entry.wireless_type in (RouterEntryWirelessType.DUAL, RouterEntryWirelessType.WIRELESS):
-            return None            
         if metric_labels is None:
-            metric_labels = []                
+            metric_labels = []
+        wireless_type = router_entry.capsman_entry.wireless_type
+        caps_interfaces = []
         try:
-            caps_interfaces = router_entry.capsman_entry.api_connection.router_api().get_resource('/caps-man/interface').get()
+            # Legacy CAPsMAN package
+            if wireless_type in (RouterEntryWirelessType.DUAL, RouterEntryWirelessType.WIRELESS):
+                caps_interfaces.extend(
+                    router_entry.capsman_entry.api_connection.router_api().get_resource('/caps-man/interface').get()
+                )
+            # New wifi/wifiwave2 CAPsMAN package — CAPsMAN virtual interfaces appear in
+            # /interface/<pkg> with names prefixed "cap-wifi". The new API doesn't expose
+            # current_state/current_channel/current_registered_clients under those field
+            # names, but `configuration` IS present — which is a stable, user-meaningful
+            # identifier that survives interface renumbering across router reboots.
+            if wireless_type in (RouterEntryWirelessType.DUAL, RouterEntryWirelessType.WIFI, RouterEntryWirelessType.WIFIWAVE2):
+                wireless_package = WirelessMetricsDataSource.wireless_package(router_entry.capsman_entry)
+                all_wifi = router_entry.capsman_entry.api_connection.router_api().get_resource(f'/interface/{wireless_package}').get()
+                caps_interfaces.extend([i for i in all_wifi if i.get('name', '').startswith('cap-wifi')])
             return BaseDSProcessor.trimmed_records(router_entry, router_records = caps_interfaces, metric_labels = metric_labels)
         except Exception as exc:
             print(f'Error getting CAPsMAN interfaces info from router {router_entry.capsman_entry.router_name}@{router_entry.capsman_entry.config_entry.hostname}: {exc}')
             return None
+
+    @staticmethod
+    def interface_to_configuration_map(router_entry):
+        ''' Build a {interface_name: configuration_name} map for CAPsMAN virtual interfaces.
+            Used to augment client registration records with a stable `configuration` label
+            that does not shuffle when CAPsMAN renumbers cap-wifi interfaces on reboot.
+        '''
+        mapping = {}
+        wireless_type = router_entry.capsman_entry.wireless_type
+        try:
+            if wireless_type in (RouterEntryWirelessType.DUAL, RouterEntryWirelessType.WIRELESS):
+                for iface in router_entry.capsman_entry.api_connection.router_api().get_resource('/caps-man/interface').get():
+                    mapping[iface.get('name', '')] = iface.get('configuration', '')
+            if wireless_type in (RouterEntryWirelessType.DUAL, RouterEntryWirelessType.WIFI, RouterEntryWirelessType.WIFIWAVE2):
+                wireless_package = WirelessMetricsDataSource.wireless_package(router_entry.capsman_entry)
+                for iface in router_entry.capsman_entry.api_connection.router_api().get_resource(f'/interface/{wireless_package}').get():
+                    name = iface.get('name', '')
+                    if name.startswith('cap-wifi'):
+                        mapping[name] = iface.get('configuration', '')
+        except Exception:
+            pass  # best-effort — absence is handled gracefully by callers
+        return mapping

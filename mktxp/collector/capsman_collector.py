@@ -51,21 +51,30 @@ class CapsmanCollector(BaseCollector):
             # the client info metrics
             if router_entry.config_entry.capsman_clients:
 
+                # Build an interface → configuration map and stamp each registration
+                # record with its `configuration` label. `interface` (cap-wifiN) is
+                # dynamic — MikroTik renumbers CAPsMAN virtual interfaces on boot
+                # based on CAP-reconnect order — so downstream queries/dashboards
+                # keyed on `configuration` (e.g. "cfg-5GHZ-dacave") are stable and
+                # meaningful, while those keyed on `interface` are not.
+                iface_to_config = CapsmanInterfacesDatasource.interface_to_configuration_map(router_entry)
+
                 # translate / trim / augment registration records
                 for registration_record in registration_records:
                     BaseOutputProcessor.augment_record(router_entry, registration_record)
+                    registration_record['configuration'] = iface_to_config.get(registration_record.get('interface', ''), '')
 
-                tx_byte_metrics = BaseCollector.counter_collector('capsman_clients_tx_bytes', 'Number of sent packet bytes', registration_records, 'tx_bytes', ['dhcp_name', 'mac_address'])
+                tx_byte_metrics = BaseCollector.counter_collector('capsman_clients_tx_bytes', 'Number of sent packet bytes', registration_records, 'tx_bytes', ['dhcp_name', 'mac_address', 'configuration'])
                 yield tx_byte_metrics
 
-                rx_byte_metrics = BaseCollector.counter_collector('capsman_clients_rx_bytes', 'Number of received packet bytes', registration_records, 'rx_bytes', ['dhcp_name', 'mac_address'])
+                rx_byte_metrics = BaseCollector.counter_collector('capsman_clients_rx_bytes', 'Number of received packet bytes', registration_records, 'rx_bytes', ['dhcp_name', 'mac_address', 'configuration'])
                 yield rx_byte_metrics
 
-                signal_strength_metrics = BaseCollector.gauge_collector('capsman_clients_signal_strength', 'Client devices signal strength', registration_records, 'rx_signal', ['dhcp_name', 'mac_address'])
+                signal_strength_metrics = BaseCollector.gauge_collector('capsman_clients_signal_strength', 'Client devices signal strength', registration_records, 'rx_signal', ['dhcp_name', 'mac_address', 'configuration'])
                 yield signal_strength_metrics
 
                 registration_metrics = BaseCollector.info_collector('capsman_clients_devices', 'Registered client devices info',
-                                        registration_records, ['dhcp_name', 'dhcp_address', 'rx_signal', 'ssid', 'tx_rate', 'rx_rate', 'interface', 'mac_address', 'uptime'])
+                                        registration_records, ['dhcp_name', 'dhcp_address', 'rx_signal', 'ssid', 'tx_rate', 'rx_rate', 'interface', 'configuration', 'mac_address', 'uptime'])
                 yield registration_metrics
 
 
