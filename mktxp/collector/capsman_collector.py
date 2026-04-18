@@ -51,34 +51,38 @@ class CapsmanCollector(BaseCollector):
             # the client info metrics
             if router_entry.config_entry.capsman_clients:
 
-                # Build an interface → configuration map and stamp each registration
-                # record with its `configuration` label. `interface` (cap-wifiN) is
-                # dynamic — MikroTik renumbers CAPsMAN virtual interfaces on boot
-                # based on CAP-reconnect order — so downstream queries/dashboards
-                # keyed on `configuration` (e.g. "cfg-5GHZ-dacave") are stable and
-                # meaningful, while those keyed on `interface` are not.
-                iface_to_config = CapsmanInterfacesDatasource.interface_to_configuration_map(router_entry)
+                # Build an interface → channel-info map and stamp each registration
+                # record with `configuration` and `frequency` labels. `interface`
+                # (cap-wifiN) is dynamic — MikroTik renumbers CAPsMAN virtual interfaces
+                # on boot based on CAP-reconnect order — so downstream queries/dashboards
+                # keyed on `configuration` (e.g. "cfg-5GHZ-dacave") are stable. The
+                # `frequency` label enables per-channel congestion analysis without
+                # requiring dashboards to hard-code channel-to-AP mappings.
+                iface_channel_info = CapsmanInterfacesDatasource.interface_channel_info(router_entry)
 
                 # translate / trim / augment registration records
                 for registration_record in registration_records:
                     BaseOutputProcessor.augment_record(router_entry, registration_record)
-                    registration_record['configuration'] = iface_to_config.get(registration_record.get('interface', ''), '')
+                    chinfo = iface_channel_info.get(registration_record.get('interface', ''), {})
+                    registration_record['configuration'] = chinfo.get('configuration', '')
+                    registration_record['frequency'] = chinfo.get('frequency', '')
 
-                tx_byte_metrics = BaseCollector.counter_collector('capsman_clients_tx_bytes', 'Number of sent packet bytes', registration_records, 'tx_bytes', ['dhcp_name', 'mac_address', 'configuration'])
+                client_label_set = ['dhcp_name', 'mac_address', 'configuration', 'frequency']
+                tx_byte_metrics = BaseCollector.counter_collector('capsman_clients_tx_bytes', 'Number of sent packet bytes', registration_records, 'tx_bytes', client_label_set)
                 yield tx_byte_metrics
 
-                rx_byte_metrics = BaseCollector.counter_collector('capsman_clients_rx_bytes', 'Number of received packet bytes', registration_records, 'rx_bytes', ['dhcp_name', 'mac_address', 'configuration'])
+                rx_byte_metrics = BaseCollector.counter_collector('capsman_clients_rx_bytes', 'Number of received packet bytes', registration_records, 'rx_bytes', client_label_set)
                 yield rx_byte_metrics
 
-                signal_strength_metrics = BaseCollector.gauge_collector('capsman_clients_signal_strength', 'Client devices signal strength', registration_records, 'rx_signal', ['dhcp_name', 'mac_address', 'configuration'])
+                signal_strength_metrics = BaseCollector.gauge_collector('capsman_clients_signal_strength', 'Client devices signal strength', registration_records, 'rx_signal', client_label_set)
                 yield signal_strength_metrics
 
                 registration_metrics = BaseCollector.info_collector('capsman_clients_devices', 'Registered client devices info',
-                                        registration_records, ['dhcp_name', 'dhcp_address', 'rx_signal', 'ssid', 'tx_rate', 'rx_rate', 'interface', 'configuration', 'mac_address', 'uptime'])
+                                        registration_records, ['dhcp_name', 'dhcp_address', 'rx_signal', 'ssid', 'tx_rate', 'rx_rate', 'interface', 'configuration', 'frequency', 'mac_address', 'uptime'])
                 yield registration_metrics
 
 
-        remote_cap_interface_labels = ['name', 'configuration', 'mac_address', 'current_state', 'current_channel', 'current_registered_clients']
+        remote_cap_interface_labels = ['name', 'configuration', 'mac_address', 'current_state', 'current_channel', 'current_registered_clients', 'frequency']
         remote_cap_interface_records = CapsmanInterfacesDatasource.metric_records(router_entry, metric_labels = remote_cap_interface_labels)
         if remote_cap_interface_records:
             remote_caps_metrics = BaseCollector.info_collector('capsman_interfaces', 'CAPsMAN interfaces', remote_cap_interface_records, remote_cap_interface_labels)

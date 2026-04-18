@@ -103,7 +103,16 @@ class CapsmanInterfacesDatasource:
             if wireless_type in (RouterEntryWirelessType.DUAL, RouterEntryWirelessType.WIFI, RouterEntryWirelessType.WIFIWAVE2):
                 wireless_package = WirelessMetricsDataSource.wireless_package(router_entry.capsman_entry)
                 all_wifi = router_entry.capsman_entry.api_connection.router_api().get_resource(f'/interface/{wireless_package}').get()
-                caps_interfaces.extend([i for i in all_wifi if i.get('name', '').startswith('cap-wifi')])
+                for iface in all_wifi:
+                    if not iface.get('name', '').startswith('cap-wifi'):
+                        continue
+                    # Extract a usable `frequency` label from the nested `channel.frequency`
+                    # field. Values arrive as "2462" (single) or "5500,5660" (multi, for
+                    # DFS fallback or 80MHz groupings) — take the primary/first entry so
+                    # downstream panels can stack clients per operating channel.
+                    raw_freq = iface.get('channel.frequency', '') or ''
+                    iface['frequency'] = raw_freq.split(',', 1)[0].strip() if raw_freq else ''
+                    caps_interfaces.append(iface)
             return BaseDSProcessor.trimmed_records(router_entry, router_records = caps_interfaces, metric_labels = metric_labels)
         except Exception as exc:
             print(f'Error getting CAPsMAN interfaces info from router {router_entry.capsman_entry.router_name}@{router_entry.capsman_entry.config_entry.hostname}: {exc}')
@@ -111,22 +120,42 @@ class CapsmanInterfacesDatasource:
 
     @staticmethod
     def interface_to_configuration_map(router_entry):
-        ''' Build a {interface_name: configuration_name} map for CAPsMAN virtual interfaces.
-            Used to augment client registration records with a stable `configuration` label
-            that does not shuffle when CAPsMAN renumbers cap-wifi interfaces on reboot.
+        ''' Back-compat shim returning the flat {interface_name: configuration_name} map.
+            New callers should use `interface_channel_info` for richer per-interface data.
         '''
-        mapping = {}
+        return {name: info.get('configuration', '')
+                for name, info in CapsmanInterfacesDatasource.interface_channel_info(router_entry).items()}
+
+    @staticmethod
+    def interface_channel_info(router_entry):
+        ''' Build a {interface_name: {configuration, frequency}} map for CAPsMAN virtual
+            interfaces. Used to augment client registration records with stable labels
+            (`configuration` survives cap-wifi renumbering across reboots, `frequency`
+            lets dashboards group by operating channel for congestion analysis).
+        '''
+        info = {}
         wireless_type = router_entry.capsman_entry.wireless_type
         try:
             if wireless_type in (RouterEntryWirelessType.DUAL, RouterEntryWirelessType.WIRELESS):
                 for iface in router_entry.capsman_entry.api_connection.router_api().get_resource('/caps-man/interface').get():
-                    mapping[iface.get('name', '')] = iface.get('configuration', '')
+                    name = iface.get('name', '')
+                    # Legacy caps-man: current-channel looks like "5260/ax/Ce" — take primary freq.
+                    curr = iface.get('current-channel', '') or ''
+                    info[name] = {
+                        'configuration': iface.get('configuration', ''),
+                        'frequency': curr.split('/', 1)[0] if curr else '',
+                    }
             if wireless_type in (RouterEntryWirelessType.DUAL, RouterEntryWirelessType.WIFI, RouterEntryWirelessType.WIFIWAVE2):
                 wireless_package = WirelessMetricsDataSource.wireless_package(router_entry.capsman_entry)
                 for iface in router_entry.capsman_entry.api_connection.router_api().get_resource(f'/interface/{wireless_package}').get():
                     name = iface.get('name', '')
-                    if name.startswith('cap-wifi'):
-                        mapping[name] = iface.get('configuration', '')
+                    if not name.startswith('cap-wifi'):
+                        continue
+                    raw_freq = iface.get('channel.frequency', '') or ''
+                    info[name] = {
+                        'configuration': iface.get('configuration', ''),
+                        'frequency': raw_freq.split(',', 1)[0].strip() if raw_freq else '',
+                    }
         except Exception:
             pass  # best-effort — absence is handled gracefully by callers
-        return mapping
+        return info
