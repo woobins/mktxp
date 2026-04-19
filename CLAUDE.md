@@ -53,19 +53,19 @@ but the log fills up and duration accounting is wrong.
 ### 3. wifi_neighbor collector is disabled — CAPsMAN flat-snoop restarts the AP
 
 The `wifi_neighbor` collector is feature-complete but **disabled in
-production** as of 2026-04-19. Root cause: `/interface/wifi flat-snoop`
-issued via CAPsMAN against a `cap-wifiN` bound virtual interface causes
-the corresponding physical AP to stop/start its SSID for the full snoop
-duration, dropping all connected clients. Confirmed via rtr-panel syslog
-`"stopping AP, disabling"` events correlating 1:1 with snoop starts.
+production** as of 2026-04-19. Every call to `/interface/wifi
+flat-snoop` on a CAPsMAN-bound `cap-wifiN` virtual interface causes
+the underlying physical AP to stop/start its SSID for the snoop
+duration, kicking all connected clients. Reproduces 1:1 with the
+collector's 30s round-robin cadence.
 
-Earlier lab tests ("non-disruptive at ≤10s") missed this because the
-target client had already roamed off the snooped radio and ICMP kept
-flowing via its new AP.
-
-See `homelab-infra/incidents/2026-04-19-0700-wifi-neighbor-ap-restart.md`
-for the full post-mortem and remediation options. If you're touching
-this collector, start there.
+Not a code-level bug in this fork; it's how CAPsMAN handles flat-snoop
+on bound interfaces. See
+`homelab-infra/incidents/2026-04-19-0700-wifi-neighbor-ap-restart.md`
+for the full trace, and in particular the section on how to correctly
+verify "no stopping AP events occurred" — use Loki with a time-
+bounded LogQL filter, not a bounded-entries RouterOS log API fetch
+(the latter gets flooded out by other wireless traffic).
 
 ### 4. `BaseDSProcessor.trimmed_records` STRIPS fields not in `metric_labels`
 
