@@ -53,6 +53,7 @@ from mktxp.collector.switch_collector import SwitchPortCollector
 from mktxp.collector.certificate_collector import CertificateCollector
 from mktxp.collector.dns_collector import DNSCollector
 from mktxp.collector.container_collector import ContainerCollector
+from mktxp.collector.wifi_neighbor_collector import WifiNeighborCollector
 
 class CollectorRegistry:
     ''' MKTXP Collectors Registry
@@ -90,6 +91,7 @@ class CollectorRegistry:
 
         self.register(CollectorKeys.WLAN_COLLECTOR, WLANCollector.collect)
         self.register(CollectorKeys.CAPSMAN_COLLECTOR, CapsmanCollector.collect)
+        self.register(CollectorKeys.WIFI_NEIGHBOR_COLLECTOR, WifiNeighborCollector.collect)
 
         self.register(CollectorKeys.USER_COLLECTOR, UserCollector.collect)
         self.register(CollectorKeys.QUEUE_TREE_COLLECTOR, QueueTreeCollector.collect)
