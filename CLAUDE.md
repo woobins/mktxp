@@ -50,7 +50,24 @@ If the key isn't pre-populated, `KeyError` is raised for every router
 on every scrape. Metrics still flow (error is caught after the yield),
 but the log fills up and duration accounting is wrong.
 
-### 3. `BaseDSProcessor.trimmed_records` STRIPS fields not in `metric_labels`
+### 3. wifi_neighbor collector is disabled — CAPsMAN flat-snoop restarts the AP
+
+The `wifi_neighbor` collector is feature-complete but **disabled in
+production** as of 2026-04-19. Root cause: `/interface/wifi flat-snoop`
+issued via CAPsMAN against a `cap-wifiN` bound virtual interface causes
+the corresponding physical AP to stop/start its SSID for the full snoop
+duration, dropping all connected clients. Confirmed via rtr-panel syslog
+`"stopping AP, disabling"` events correlating 1:1 with snoop starts.
+
+Earlier lab tests ("non-disruptive at ≤10s") missed this because the
+target client had already roamed off the snooped radio and ICMP kept
+flowing via its new AP.
+
+See `homelab-infra/incidents/2026-04-19-0700-wifi-neighbor-ap-restart.md`
+for the full post-mortem and remediation options. If you're touching
+this collector, start there.
+
+### 4. `BaseDSProcessor.trimmed_records` STRIPS fields not in `metric_labels`
 
 When the collector passes `metric_labels` to the datasource, any record
 field NOT in that list gets dropped. If you later try to use a field as

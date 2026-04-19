@@ -77,7 +77,18 @@ configuration-label work — single API call, two labels emitted.
 **Files:** `mktxp/collector/capsman_collector.py`,
 `mktxp/datasource/capsman_ds.py`
 
-### 4. `56cacb9` — `wifi_neighbor` collector: neighbor APs + client signal via flat-snoop
+### 4. `56cacb9` — `wifi_neighbor` collector: neighbor APs + client signal via flat-snoop  ⚠️ DISABLED IN PROD
+
+**Current status (2026-04-19): feature-complete but DISABLED** in
+`homelab-infra/ansible/roles/mktxp/templates/mktxp.conf.j2`
+(`wifi_neighbor = False`). Root cause: every flat-snoop call on a
+CAPsMAN-bound `cap-wifiN` interface causes the corresponding physical
+AP to stop and restart its SSID for the full snoop duration, dropping
+all connected clients. Not a code bug — intrinsic CAPsMAN behavior.
+See `homelab-infra/incidents/2026-04-19-0700-wifi-neighbor-ap-restart.md`
+for post-mortem and remediation options.
+
+
 
 New collector that uses `/interface/wifi/flat-snoop` (wifi-qcom only) on
 CAPsMAN-managed radios to surface two things per scrape:
