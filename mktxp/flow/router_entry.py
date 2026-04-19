@@ -72,6 +72,7 @@ class RouterEntry:
                             CollectorKeys.ROUTE_COLLECTOR: 0,
                             CollectorKeys.WLAN_COLLECTOR: 0,
                             CollectorKeys.CAPSMAN_COLLECTOR: 0,
+                            CollectorKeys.WIFI_NEIGHBOR_COLLECTOR: 0,
                             CollectorKeys.QUEUE_TREE_COLLECTOR: 0,
                             CollectorKeys.QUEUE_SIMPLE_COLLECTOR: 0,
                             CollectorKeys.KID_CONTROL_DEVICE_COLLECTOR: 0,
