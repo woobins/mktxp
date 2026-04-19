@@ -60,7 +60,7 @@ class WifiNeighborCollector(BaseCollector):
 
         # ----- Neighbor AP (BSS) metrics -----
         bss_labels = ['scanner_interface', 'configuration', 'address', 'ssid',
-                      'frequency', 'rate_mbps', 'rsn_akms', 'pairwise_ciphers']
+                      'frequency', 'rsn_akms', 'pairwise_ciphers']
         if bss_records:
             for metric_name, doc, value_key in [
                 ('wifi_neighbor_signal_dbm',
@@ -125,7 +125,7 @@ class WifiNeighborCollector(BaseCollector):
                 'Neighbor AP details observed via flat-snoop',
                 bss_records,
                 ['scanner_interface', 'configuration', 'address', 'ssid',
-                 'frequency', 'rate_mbps', 'rsn_akms', 'pairwise_ciphers'])
+                 'frequency', 'rsn_akms', 'pairwise_ciphers'])
 
         # ----- Client (STA) metrics -----
         # Stations seen passively on this radio's channel — includes our own
@@ -135,7 +135,7 @@ class WifiNeighborCollector(BaseCollector):
         # mktxp_capsman_clients_* on mac_address.
         if sta_records:
             sta_labels = ['scanner_interface', 'configuration', 'mac_address',
-                          'frequency', 'rate_mbps']
+                          'frequency']
             for metric_name, doc, value_key in [
                 ('wifi_client_signal_dbm',
                  'Signal strength of client as seen by scanner interface', 'signal'),
